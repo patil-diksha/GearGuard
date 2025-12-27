@@ -1,0 +1,82 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum MaintenanceRequestType {
+  CORRECTIVE
+  PREVENTIVE
+}
+
+enum MaintenanceRequestStatus {
+  NEW
+  IN_PROGRESS
+  REPAIRED
+  SCRAP
+}
+
+model Equipment {
+  id                      String                 @id @default(cuid())
+  name                    String
+  serialNumber            String                 @unique
+  department              String?
+  owner                   String?
+  location                String
+  purchaseDate            DateTime
+  warrantyEnd             DateTime
+  assignedMaintenanceTeamId String?
+  isScrapped              Boolean                @default(false)
+  assignedMaintenanceTeam MaintenanceTeam?       @relation(fields: [assignedMaintenanceTeamId], references: [id])
+  maintenanceRequests     MaintenanceRequest[]
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+}
+
+model MaintenanceTeam {
+  id           String                @id @default(cuid())
+  name         String
+  members      String[]
+  equipment     Equipment[]
+  maintenanceRequests MaintenanceRequest[]
+  teamActivities TeamActivity[]
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+}
+
+model MaintenanceRequest {
+  id               String                @id @default(cuid())
+  subject          String
+  description      String?
+  type             MaintenanceRequestType
+  equipmentId      String
+  autoFilledTeamId String
+  assignedTechnician String?
+  scheduledDate    DateTime?
+  duration         Float?                // in hours
+  status           MaintenanceRequestStatus @default(NEW)
+  equipment        Equipment              @relation(fields: [equipmentId], references: [id])
+  maintenanceTeam  MaintenanceTeam        @relation(fields: [autoFilledTeamId], references: [id])
+  teamActivities   TeamActivity[]
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+}
+
+model TeamActivity {
+  id        String   @id @default(cuid())
+  requestId String
+  teamId    String
+  action    String
+  timestamp DateTime @default(now())
+  request   MaintenanceRequest @relation(fields: [requestId], references: [id])
+  team      MaintenanceTeam  @relation(fields: [teamId], references: [id])
+  createdAt DateTime @default(now())
+}
