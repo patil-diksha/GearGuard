@@ -24,59 +24,171 @@ enum MaintenanceRequestStatus {
   SCRAP
 }
 
+enum UrgencyLevel {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum ActivityStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
 model Equipment {
-  id                      String                 @id @default(cuid())
-  name                    String
-  serialNumber            String                 @unique
-  department              String?
-  owner                   String?
-  location                String
-  purchaseDate            DateTime
-  warrantyEnd             DateTime
+  id                        String               @id @default(cuid())
+  name                      String
+  serialNumber              String               @unique
+  department                String?
+  owner                     String?
+  location                  String
+  purchaseDate              DateTime
+  warrantyEnd               DateTime
   assignedMaintenanceTeamId String?
-  isScrapped              Boolean                @default(false)
-  assignedMaintenanceTeam MaintenanceTeam?       @relation(fields: [assignedMaintenanceTeamId], references: [id])
-  maintenanceRequests     MaintenanceRequest[]
-  createdAt               DateTime               @default(now())
-  updatedAt               DateTime               @updatedAt
+  isScrapped                Boolean              @default(false)
+  assignedMaintenanceTeam   MaintenanceTeam?     @relation(fields: [assignedMaintenanceTeamId], references: [id])
+  maintenanceRequests       MaintenanceRequest[]
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
 }
 
 model MaintenanceTeam {
-  id           String                @id @default(cuid())
-  name         String
-  members      String[]
-  equipment     Equipment[]
+  id                  String               @id @default(cuid())
+  name                String
+  members             String[]
+  equipment           Equipment[]
   maintenanceRequests MaintenanceRequest[]
-  teamActivities TeamActivity[]
-  createdAt    DateTime              @default(now())
-  updatedAt    DateTime              @updatedAt
+  teamActivities      TeamActivity[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 }
 
 model MaintenanceRequest {
-  id               String                @id @default(cuid())
-  subject          String
-  description      String?
-  type             MaintenanceRequestType
-  equipmentId      String
-  autoFilledTeamId String
+  id                 String                   @id @default(cuid())
+  subject            String
+  description        String?
+  type               MaintenanceRequestType
+  equipmentId        String
+  workCenterId       String?
+  categoryId         String?
+  autoFilledTeamId   String
   assignedTechnician String?
-  scheduledDate    DateTime?
-  duration         Float?                // in hours
-  status           MaintenanceRequestStatus @default(NEW)
-  equipment        Equipment              @relation(fields: [equipmentId], references: [id])
-  maintenanceTeam  MaintenanceTeam        @relation(fields: [autoFilledTeamId], references: [id])
-  teamActivities   TeamActivity[]
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
+  activationTicket   String?
+  usedPart           String?
+  urgency            UrgencyLevel             @default(MEDIUM)
+  scheduledDate      DateTime?
+  duration           Float? // in hours
+  status             MaintenanceRequestStatus @default(NEW)
+  equipment          Equipment                @relation(fields: [equipmentId], references: [id])
+  maintenanceTeam    MaintenanceTeam          @relation(fields: [autoFilledTeamId], references: [id])
+  teamActivities     TeamActivity[]
+  workOrders         WorkOrder[]
+  activities         Activity[]
+  requestCategory    RequestCategory?         @relation(fields: [categoryId], references: [id])
+  workCenter         WorkCenter?              @relation(fields: [workCenterId], references: [id])
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
 }
 
 model TeamActivity {
-  id        String   @id @default(cuid())
+  id        String             @id @default(cuid())
   requestId String
   teamId    String
   action    String
-  timestamp DateTime @default(now())
+  timestamp DateTime           @default(now())
   request   MaintenanceRequest @relation(fields: [requestId], references: [id])
-  team      MaintenanceTeam  @relation(fields: [teamId], references: [id])
+  team      MaintenanceTeam    @relation(fields: [teamId], references: [id])
+  createdAt DateTime           @default(now())
+}
+
+model WorkOrder {
+  id             String             @id @default(cuid())
+  requestId      String
+  workCenterId   String
+  technicianId   String?
+  status         ActivityStatus     @default(PENDING)
+  priority       UrgencyLevel       @default(MEDIUM)
+  estimatedHours Float?
+  actualHours    Float?
+  notes          String?
+  activities     Activity[]
+  request        MaintenanceRequest @relation(fields: [requestId], references: [id])
+  workCenter     WorkCenter         @relation(fields: [workCenterId], references: [id])
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+}
+
+model Activity {
+  id           String             @id @default(cuid())
+  requestId    String
+  workOrderId  String?
+  name         String
+  description  String?
+  workCenterId String?
+  technician   String?
+  startDate    DateTime?
+  endDate      DateTime?
+  status       ActivityStatus     @default(PENDING)
+  partsUsed    String[]
+  cost         Float?
+  oeeAchieved  Float?
+  request      MaintenanceRequest @relation(fields: [requestId], references: [id])
+  workOrder    WorkOrder?         @relation(fields: [workOrderId], references: [id])
+  workCenter   WorkCenter?        @relation(fields: [workCenterId], references: [id])
+  parts        Part[]             @relation("PartActivities")
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+}
+
+model Part {
+  id           String      @id @default(cuid())
+  name         String
+  modelNo      String?
+  serialNo     String      @unique
+  location     String
+  workCenterId String?
+  cost         Float?
+  quantity     Int         @default(1)
+  minQuantity  Int         @default(1)
+  description  String?
+  activities   Activity[]  @relation("PartActivities")
+  workCenter   WorkCenter? @relation("WorkCenterParts", fields: [workCenterId], references: [id])
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+model WorkCenter {
+  id         String               @id @default(cuid())
+  name       String               @unique
+  location   String?
+  department String?
+  parts      Part[]               @relation("WorkCenterParts")
+  requests   MaintenanceRequest[] @relation
+  workOrders WorkOrder[]          @relation
+  activities Activity[]           @relation
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+}
+
+model RequestCategory {
+  id          String               @id @default(cuid())
+  name        String
+  description String?
+  keywords    String[] // Auto-fill keywords
+  templates   String? // JSON template
+  requests    MaintenanceRequest[]
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

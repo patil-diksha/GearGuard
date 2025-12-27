@@ -32,6 +32,12 @@ interface Equipment {
   assignedMaintenanceTeamId?: string
 }
 
+interface WorkCenter {
+  id: string
+  name: string
+  location?: string
+}
+
 interface MaintenanceRequest {
   id: string
   subject: string
@@ -41,8 +47,14 @@ interface MaintenanceRequest {
   createdAt: string
   scheduledDate?: string
   assignedTechnician?: string
-  equipmentId: string
-  equipment: Equipment
+  equipmentId?: string
+  workCenterId?: string
+  urgency?: string
+  category?: string
+  usedPart?: string
+  activationTicket?: string
+  equipment?: Equipment
+  workCenter?: WorkCenter
 }
 
 interface Team {
@@ -51,6 +63,8 @@ interface Team {
 }
 
 const STAGES = ['NEW', 'IN_PROGRESS', 'REPAIRED', 'SCRAP']
+const URGENCY_LEVELS = ['LOW', 'MEDIUM', 'HIGH', 'URGENT']
+const CATEGORIES = ['ELECTRICAL', 'MECHANICAL', 'HYDRAULIC', 'PNEUMATIC', 'SOFTWARE', 'OTHER']
 const STAGE_LABELS: Record<string, string> = {
   'NEW': 'New',
   'IN_PROGRESS': 'In Progress',
@@ -107,6 +121,16 @@ function SortableCard({ request }: { request: MaintenanceRequest }) {
     request.status !== 'REPAIRED' && 
     request.status !== 'SCRAP'
 
+  const getUrgencyColor = (urgency?: string) => {
+    switch (urgency) {
+      case 'LOW': return 'bg-blue-100 text-blue-800'
+      case 'MEDIUM': return 'bg-yellow-100 text-yellow-800'
+      case 'HIGH': return 'bg-orange-100 text-orange-800'
+      case 'URGENT': return 'bg-red-100 text-red-800'
+      default: return 'bg-gray-100 text-gray-800'
+    }
+  }
+
   return (
     <div
       ref={setNodeRef}
@@ -124,15 +148,44 @@ function SortableCard({ request }: { request: MaintenanceRequest }) {
         </div>
       )}
       
-      <h3 className="font-semibold text-gray-900 mb-2">{request.subject}</h3>
+      <div className="flex items-start justify-between mb-2">
+        <h3 className="font-semibold text-gray-900 flex-1">{request.subject}</h3>
+        {request.urgency && (
+          <span className={`ml-2 inline-flex items-center px-2 py-1 rounded text-xs font-medium ${getUrgencyColor(request.urgency)}`}>
+            {request.urgency}
+          </span>
+        )}
+      </div>
       
       <div className="space-y-1 text-sm text-gray-600">
-        <p>
-          <span className="font-medium">Equipment:</span> {request.equipment?.name}
-        </p>
+        {request.equipment && (
+          <p>
+            <span className="font-medium">Equipment:</span> {request.equipment?.name}
+          </p>
+        )}
+        {request.workCenter && (
+          <p>
+            <span className="font-medium">Work Center:</span> {request.workCenter?.name}
+          </p>
+        )}
+        {request.category && (
+          <p>
+            <span className="font-medium">Category:</span> {request.category}
+          </p>
+        )}
         {request.assignedTechnician && (
           <p>
             <span className="font-medium">Technician:</span> {request.assignedTechnician}
+          </p>
+        )}
+        {request.usedPart && (
+          <p>
+            <span className="font-medium">Part Used:</span> {request.usedPart}
+          </p>
+        )}
+        {request.activationTicket && (
+          <p>
+            <span className="font-medium">Ticket:</span> {request.activationTicket}
           </p>
         )}
         <div className="flex items-center justify-between mt-2">
@@ -161,9 +214,11 @@ export default function KanbanPage() {
   const [filterTeam, setFilterTeam] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [equipment, setEquipment] = useState<Equipment[]>([])
+  const [workCenters, setWorkCenters] = useState<WorkCenter[]>([])
   const [teams, setTeams] = useState<Team[]>([])
   const [loading, setLoading] = useState(true)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [useWorkCenter, setUseWorkCenter] = useState(false)
   
   // Form state for new request
   const [formData, setFormData] = useState({
@@ -171,8 +226,13 @@ export default function KanbanPage() {
     description: '',
     type: 'Corrective',
     equipmentId: '',
+    workCenterId: '',
     scheduledDate: '',
-    assignedTechnician: ''
+    assignedTechnician: '',
+    urgency: 'MEDIUM',
+    category: '',
+    usedPart: '',
+    activationTicket: ''
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -201,23 +261,30 @@ export default function KanbanPage() {
       if (filterTeam) params.append('teamId', filterTeam.toString())
       if (params.toString()) url += `?${params.toString()}`
 
-      const [reqRes, equipRes, teamRes] = await Promise.all([
+      const [reqRes, equipRes, wcRes, teamRes] = await Promise.all([
         fetch(url),
         fetch('/api/equipment'),
+        fetch('/api/work-centers'),
         fetch('/api/teams')
       ])
 
-      const [reqData, equipData, teamData] = await Promise.all([
+      const [reqData, equipData, wcData, teamData] = await Promise.all([
         reqRes.json(),
         equipRes.json(),
+        wcRes.json(),
         teamRes.json()
       ])
 
-      setRequests(reqData)
-      setEquipment(equipData)
-      setTeams(teamData)
+      setRequests(reqRes.ok && Array.isArray(reqData) ? reqData : [])
+      setEquipment(equipRes.ok && Array.isArray(equipData) ? equipData : [])
+      setWorkCenters(wcRes.ok && Array.isArray(wcData) ? wcData : [])
+      setTeams(teamRes.ok && Array.isArray(teamData) ? teamData : [])
     } catch (error) {
       console.error('Error fetching kanban data:', error)
+      setRequests([])
+      setEquipment([])
+      setWorkCenters([])
+      setTeams([])
     } finally {
       setLoading(false)
     }
@@ -232,7 +299,7 @@ export default function KanbanPage() {
     setActiveId(null)
 
     if (over && active.id !== over.id) {
-      // The over.id should be the stage name (column id)
+      // The over.id should be stage name (column id)
       const targetStage = over.id.toString()
       
       // Update request status
@@ -264,26 +331,33 @@ export default function KanbanPage() {
     }
   }
 
-  const handleEquipmentChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFormData({ ...formData, equipmentId: e.target.value })
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
 
     try {
+      const payload: any = {
+        subject: formData.subject,
+        description: formData.description,
+        type: formData.type,
+        urgency: formData.urgency,
+        scheduledDate: formData.scheduledDate || undefined,
+        assignedTechnician: formData.assignedTechnician || undefined,
+        category: formData.category || undefined,
+        usedPart: formData.usedPart || undefined,
+        activationTicket: formData.activationTicket || undefined
+      }
+
+      if (useWorkCenter) {
+        payload.workCenterId = formData.workCenterId
+      } else {
+        payload.equipmentId = formData.equipmentId
+      }
+
       const response = await fetch('/api/requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subject: formData.subject,
-          description: formData.description,
-          type: formData.type,
-          equipmentId: formData.equipmentId,
-          scheduledDate: formData.scheduledDate || undefined,
-          assignedTechnician: formData.assignedTechnician || undefined
-        })
+        body: JSON.stringify(payload)
       })
 
       if (!response.ok) throw new Error('Failed to create request')
@@ -297,9 +371,15 @@ export default function KanbanPage() {
         description: '',
         type: 'Corrective',
         equipmentId: '',
+        workCenterId: '',
         scheduledDate: '',
-        assignedTechnician: ''
+        assignedTechnician: '',
+        urgency: 'MEDIUM',
+        category: '',
+        usedPart: '',
+        activationTicket: ''
       })
+      setUseWorkCenter(false)
       setIsDialogOpen(false)
     } catch (error) {
       console.error('Error creating request:', error)
@@ -318,6 +398,7 @@ export default function KanbanPage() {
     return (
       req.subject.toLowerCase().includes(query) ||
       req.equipment?.name.toLowerCase().includes(query) ||
+      req.workCenter?.name.toLowerCase().includes(query) ||
       req.assignedTechnician?.toLowerCase().includes(query)
     )
   })
@@ -343,57 +424,103 @@ export default function KanbanPage() {
               + New Request
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create New Maintenance Request</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <Label htmlFor="equipmentId">Equipment *</Label>
-                <select
-                  id="equipmentId"
-                  required
-                  value={formData.equipmentId}
-                  onChange={handleEquipmentChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select equipment...</option>
-                  {equipment.map(equip => (
-                    <option key={equip.id} value={equip.id}>{equip.name} ({equip.category})</option>
-                  ))}
-                </select>
+              {/* Toggle between Equipment and Work Center */}
+              <div className="flex gap-4 mb-4">
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="targetType"
+                    value="equipment"
+                    checked={!useWorkCenter}
+                    onChange={() => setUseWorkCenter(false)}
+                    className="mr-2"
+                  />
+                  Equipment
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="targetType"
+                    value="workCenter"
+                    checked={useWorkCenter}
+                    onChange={() => setUseWorkCenter(true)}
+                    className="mr-2"
+                  />
+                  Work Center
+                </label>
               </div>
 
-              <div>
-                <Label htmlFor="type">Request Type *</Label>
-                <div className="flex gap-4 mt-2">
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      name="type"
-                      value="Corrective"
-                      checked={formData.type === 'Corrective'}
-                      onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                      className="mr-2"
-                    />
-                    Corrective (Emergency)
-                  </label>
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      name="type"
-                      value="Preventive"
-                      checked={formData.type === 'Preventive'}
-                      onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                      className="mr-2"
-                    />
-                    Preventive (Scheduled)
-                  </label>
+              {!useWorkCenter ? (
+                <div>
+                  <Label htmlFor="equipmentId">Equipment *</Label>
+                  <select
+                    id="equipmentId"
+                    required={!useWorkCenter}
+                    value={formData.equipmentId}
+                    onChange={(e) => setFormData({ ...formData, equipmentId: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select equipment...</option>
+                    {equipment.map(equip => (
+                      <option key={equip.id} value={equip.id}>{equip.name} ({equip.category})</option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <Label htmlFor="workCenterId">Work Center *</Label>
+                  <select
+                    id="workCenterId"
+                    required={useWorkCenter}
+                    value={formData.workCenterId}
+                    onChange={(e) => setFormData({ ...formData, workCenterId: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select work center...</option>
+                    {workCenters.map(wc => (
+                      <option key={wc.id} value={wc.id}>{wc.name} {wc.location ? `(${wc.location})` : ''}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="type">Request Type *</Label>
+                  <select
+                    id="type"
+                    required
+                    value={formData.type}
+                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="Corrective">Corrective (Emergency)</option>
+                    <option value="Preventive">Preventive (Scheduled)</option>
+                  </select>
+                </div>
+                <div>
+                  <Label htmlFor="urgency">Urgency *</Label>
+                  <select
+                    id="urgency"
+                    required
+                    value={formData.urgency}
+                    onChange={(e) => setFormData({ ...formData, urgency: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {URGENCY_LEVELS.map(level => (
+                      <option key={level} value={level}>{level}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
               <div>
-                <Label htmlFor="subject">Subject *</Label>
+                <Label htmlFor="subject">Request Title *</Label>
                 <Input
                   id="subject"
                   required
@@ -410,8 +537,55 @@ export default function KanbanPage() {
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   placeholder="Detailed description of the issue..."
-                  rows={4}
+                  rows={3}
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="category">Category</Label>
+                  <select
+                    id="category"
+                    value={formData.category}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select category...</option>
+                    {CATEGORIES.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label htmlFor="activationTicket">Activation Ticket</Label>
+                  <Input
+                    id="activationTicket"
+                    value={formData.activationTicket}
+                    onChange={(e) => setFormData({ ...formData, activationTicket: e.target.value })}
+                    placeholder="Ticket number"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="assignedTechnician">Assigned Staff</Label>
+                  <Input
+                    id="assignedTechnician"
+                    value={formData.assignedTechnician}
+                    onChange={(e) => setFormData({ ...formData, assignedTechnician: e.target.value })}
+                    placeholder="Enter staff/technician name"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="usedPart">Used Part</Label>
+                  <Input
+                    id="usedPart"
+                    value={formData.usedPart}
+                    onChange={(e) => setFormData({ ...formData, usedPart: e.target.value })}
+                    placeholder="Part name or number"
+                  />
+                </div>
               </div>
 
               <div>
@@ -421,16 +595,6 @@ export default function KanbanPage() {
                   type="date"
                   value={formData.scheduledDate}
                   onChange={(e) => setFormData({ ...formData, scheduledDate: e.target.value })}
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="assignedTechnician">Assigned Technician</Label>
-                <Input
-                  id="assignedTechnician"
-                  value={formData.assignedTechnician}
-                  onChange={(e) => setFormData({ ...formData, assignedTechnician: e.target.value })}
-                  placeholder="Enter technician name"
                 />
               </div>
 
@@ -445,9 +609,15 @@ export default function KanbanPage() {
                       description: '',
                       type: 'Corrective',
                       equipmentId: '',
+                      workCenterId: '',
                       scheduledDate: '',
-                      assignedTechnician: ''
+                      assignedTechnician: '',
+                      urgency: 'MEDIUM',
+                      category: '',
+                      usedPart: '',
+                      activationTicket: ''
                     })
+                    setUseWorkCenter(false)
                   }}
                   className="flex-1"
                 >
@@ -558,7 +728,9 @@ export default function KanbanPage() {
           {activeRequest ? (
             <div className="bg-white rounded-lg shadow-lg p-4 cursor-grabbing opacity-90">
               <h3 className="font-semibold text-gray-900 mb-2">{activeRequest.subject}</h3>
-              <p className="text-sm text-gray-600">{activeRequest.equipment?.name}</p>
+              <p className="text-sm text-gray-600">
+                {activeRequest.equipment?.name || activeRequest.workCenter?.name}
+              </p>
             </div>
           ) : null}
         </DragOverlay>

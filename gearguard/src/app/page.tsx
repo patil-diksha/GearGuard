@@ -1,14 +1,30 @@
 'use client'
 
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { useAuth } from '@/contexts/AuthContext'
 import { useQuery } from '@tanstack/react-query'
 
 export default function HomePage() {
+  const router = useRouter()
+  const { user, isLoading: authLoading, logout } = useAuth()
+
+  const handleLogout = () => {
+    logout()
+    router.push('/login')
+  }
+
+  // Fetch stats data (always call hooks before conditional returns)
   const { data: stats, isLoading } = useQuery({
-    queryKey: ['dashboard-stats'],
+    queryKey: ['dashboard-stats', user],
     queryFn: async () => {
+      if (!user) {
+        throw new Error('User not authenticated')
+      }
+      
       const [equipRes, reqRes, teamRes] = await Promise.all([
         fetch('/api/equipment'),
         fetch('/api/requests'),
@@ -40,8 +56,30 @@ export default function HomePage() {
           r.status === 'REPAIRED'
         ).length
       }
-    }
+    },
+    enabled: !!user // Only fetch data when user is authenticated
   })
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push('/login')
+    }
+  }, [user, authLoading, router])
+
+  // Show loading state while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
+
+  // Don't render content if user is not authenticated (will redirect)
+  if (!user) {
+    return null
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -59,6 +97,23 @@ export default function HomePage() {
                 <h1 className="text-2xl font-bold text-gray-900">GearGuard</h1>
                 <p className="text-sm text-gray-600">Maintenance Management System</p>
               </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-600">
+                Welcome, {user?.name}
+              </span>
+              <Link href="/dashboard">
+                <Button className="bg-blue-600 hover:bg-blue-700">
+                  Dashboard
+                </Button>
+              </Link>
+              <Button 
+                onClick={handleLogout}
+                variant="outline"
+                className="border-gray-300 hover:bg-gray-50 text-gray-700"
+              >
+                Sign Out
+              </Button>
             </div>
           </div>
         </div>
@@ -239,6 +294,75 @@ export default function HomePage() {
                 </p>
                 <Button className="w-full bg-orange-600 hover:bg-orange-700">
                   View Calendar
+                </Button>
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link href="/parts">
+            <Card className="bg-white hover:shadow-xl transition-all hover:-translate-y-1 cursor-pointer h-full">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="bg-purple-600 rounded-lg p-3">
+                    <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                  </div>
+                  <CardTitle>Parts Management</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600 mb-4">
+                  Manage spare parts inventory, track usage, and monitor costs across work centers.
+                </p>
+                <Button className="w-full bg-purple-600 hover:bg-purple-700">
+                  Manage Parts
+                </Button>
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link href="/work-orders">
+            <Card className="bg-white hover:shadow-xl transition-all hover:-translate-y-1 cursor-pointer h-full">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="bg-indigo-600 rounded-lg p-3">
+                    <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                  <CardTitle>Work Orders</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600 mb-4">
+                  Generate and track work orders from maintenance requests. Assign technicians and monitor progress.
+                </p>
+                <Button className="w-full bg-indigo-600 hover:bg-indigo-700">
+                  View Work Orders
+                </Button>
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link href="/activities">
+            <Card className="bg-white hover:shadow-xl transition-all hover:-translate-y-1 cursor-pointer h-full">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="bg-teal-600 rounded-lg p-3">
+                    <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                    </svg>
+                  </div>
+                  <CardTitle>Activity Log</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600 mb-4">
+                  Log and track maintenance activities, including OEE metrics, parts used, and costs.
+                </p>
+                <Button className="w-full bg-teal-600 hover:bg-teal-700">
+                  View Activities
                 </Button>
               </CardContent>
             </Card>

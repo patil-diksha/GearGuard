@@ -13,7 +13,7 @@ type MaintenanceRequest = {
   subject: string
   type: string
   status: string
-  scheduledDate: string
+  scheduledDate?: string
   equipment: {
     id: string
     name: string
@@ -21,10 +21,42 @@ type MaintenanceRequest = {
   }
 }
 
+type Activity = {
+  id: string
+  name: string
+  status: string
+  startDate?: string
+  endDate?: string
+  request: {
+    id: string
+    subject: string
+    equipment: {
+      id: string
+      name: string
+      serialNumber: string
+    }
+  }
+  workCenter?: {
+    name: string
+  }
+  technician?: string
+}
+
+type CalendarEvent = {
+  id: string
+  title: string
+  date: Date
+  type: 'request' | 'activity'
+  status: string
+  equipment: string
+  technician?: string
+  workCenter?: string
+}
+
 export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date())
 
-  const { data: requests = [], isLoading } = useQuery({
+  const { data: requests = [], isLoading: isLoadingRequests } = useQuery({
     queryKey: ['requests'],
     queryFn: async () => {
       const response = await fetch('/api/requests')
@@ -33,48 +65,101 @@ export default function CalendarPage() {
     },
   })
 
-  // Filter for preventive maintenance requests
-  const preventiveRequests = requests.filter(
+  const { data: activities = [], isLoading: isLoadingActivities } = useQuery({
+    queryKey: ['activities'],
+    queryFn: async () => {
+      const response = await fetch('/api/activities')
+      if (!response.ok) throw new Error('Failed to fetch activities')
+      return response.json()
+    },
+  })
+
+  const isLoading = isLoadingRequests || isLoadingActivities
+
+  // Filter for preventive maintenance requests with scheduled dates
+  const preventiveRequests = (requests as MaintenanceRequest[]).filter(
     (r: MaintenanceRequest) => r.type === 'PREVENTIVE' && r.scheduledDate
   )
 
-  // Get requests for selected date
-  const selectedDateRequests = selectedDate
-    ? preventiveRequests.filter((r: MaintenanceRequest) => {
-        const requestDate = new Date(r.scheduledDate)
+  // Create calendar events from requests and activities
+  const calendarEvents: CalendarEvent[] = []
+
+  preventiveRequests.forEach((req: MaintenanceRequest) => {
+    if (req.scheduledDate) {
+      calendarEvents.push({
+        id: req.id,
+        title: req.subject,
+        date: new Date(req.scheduledDate),
+        type: 'request',
+        status: req.status,
+        equipment: `${req.equipment.name} (${req.equipment.serialNumber})`,
+      })
+    }
+  })
+
+  activities.forEach((activity: Activity) => {
+    if (activity.startDate) {
+      calendarEvents.push({
+        id: activity.id,
+        title: activity.name,
+        date: new Date(activity.startDate),
+        type: 'activity',
+        status: activity.status,
+        equipment: `${activity.request.equipment.name} (${activity.request.equipment.serialNumber})`,
+        technician: activity.technician,
+        workCenter: activity.workCenter?.name,
+      })
+    }
+  })
+
+  // Get events for selected date
+  const selectedDateEvents = selectedDate
+    ? calendarEvents.filter((event: CalendarEvent) => {
         return (
-          requestDate.getDate() === selectedDate.getDate() &&
-          requestDate.getMonth() === selectedDate.getMonth() &&
-          requestDate.getFullYear() === selectedDate.getFullYear()
+          event.date.getDate() === selectedDate.getDate() &&
+          event.date.getMonth() === selectedDate.getMonth() &&
+          event.date.getFullYear() === selectedDate.getFullYear()
         )
       })
     : []
 
-  // Get dates with preventive maintenance
-  const datesWithMaintenance = preventiveRequests.map((r: MaintenanceRequest) =>
-    new Date(r.scheduledDate)
-  )
-
-  // Function to get count of requests for a specific date
-  const getRequestCountForDate = (date: Date) => {
-    return preventiveRequests.filter((r: MaintenanceRequest) => {
-      const requestDate = new Date(r.scheduledDate)
-      return (
-        requestDate.getDate() === date.getDate() &&
-        requestDate.getMonth() === date.getMonth() &&
-        requestDate.getFullYear() === date.getFullYear()
-      )
-    }).length
-  }
+  // Get unique dates with events
+  const datesWithEvents = Array.from(
+    new Set(calendarEvents.map((e: CalendarEvent) => e.date.toDateString()))
+  ).map((dateStr) => new Date(dateStr))
 
   const isDateDisabled = (date: Date) => {
-    return !datesWithMaintenance.some((d: Date) => {
-      return (
-        d.getDate() === date.getDate() &&
-        d.getMonth() === date.getMonth() &&
-        d.getFullYear() === date.getFullYear()
-      )
+    return !datesWithEvents.some((d: Date) => {
+      return d.getDate() === date.getDate() &&
+             d.getMonth() === date.getMonth() &&
+             d.getFullYear() === date.getFullYear()
     })
+  }
+
+  const getStatusColor = (status: string, type: string) => {
+    if (type === 'request') {
+      switch (status) {
+        case 'REPAIRED':
+          return 'bg-green-100 text-green-800'
+        case 'SCRAP':
+          return 'bg-red-100 text-red-800'
+        default:
+          return 'bg-blue-100 text-blue-800'
+      }
+    } else {
+      switch (status) {
+        case 'PENDING':
+          return 'bg-yellow-100 text-yellow-800'
+        case 'IN_PROGRESS':
+          return 'bg-blue-100 text-blue-800'
+        case 'COMPLETED':
+          return 'bg-green-100 text-green-800'
+        case 'CANCELLED':
+          return 'bg-red-100 text-red-800'
+        default:
+          return 'bg-gray-100 text-gray-800'
+      }
+    }
   }
 
   if (isLoading) {
@@ -111,33 +196,33 @@ export default function CalendarPage() {
               <CardHeader>
                 <CardTitle>Select Date</CardTitle>
               </CardHeader>
-              <CardContent>
-                <Calendar
-                  mode="single"
-                  selected={selectedDate}
-                  onSelect={setSelectedDate}
-                  className="rounded-md border"
-                  modifiers={{
-                    scheduled: datesWithMaintenance,
-                  }}
-                  modifiersStyles={{
-                    scheduled: {
-                      backgroundColor: '#3b82f6',
-                      color: 'white',
-                      fontWeight: 'bold',
-                    },
-                  }}
-                  disabled={isDateDisabled}
-                />
-                <div className="mt-4 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 bg-blue-500 rounded"></div>
-                    <span className="text-sm text-gray-600">
-                      Scheduled Maintenance ({datesWithMaintenance.length} days)
-                    </span>
-                  </div>
-                </div>
-              </CardContent>
+      <CardContent>
+        <Calendar
+          mode="single"
+          selected={selectedDate}
+          onSelect={setSelectedDate}
+          className="rounded-md border"
+          modifiers={{
+            scheduled: datesWithEvents,
+          }}
+          modifiersStyles={{
+            scheduled: {
+              backgroundColor: '#3b82f6',
+              color: 'white',
+              fontWeight: 'bold',
+            },
+          }}
+          disabled={isDateDisabled}
+        />
+        <div className="mt-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-blue-500 rounded"></div>
+            <span className="text-sm text-gray-600">
+              Scheduled Events ({datesWithEvents.length} days)
+            </span>
+          </div>
+        </div>
+      </CardContent>
             </Card>
           </div>
 
@@ -147,7 +232,7 @@ export default function CalendarPage() {
               <CardHeader>
                 <CardTitle>
                   {selectedDate
-                    ? `Maintenance for ${selectedDate.toLocaleDateString('en-US', {
+                    ? `Scheduled for ${selectedDate.toLocaleDateString('en-US', {
                         weekday: 'long',
                         year: 'numeric',
                         month: 'long',
@@ -157,38 +242,55 @@ export default function CalendarPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {selectedDateRequests.length > 0 ? (
+                {selectedDateEvents.length > 0 ? (
                   <div className="space-y-4">
-                    {selectedDateRequests.map((request: MaintenanceRequest) => (
-                      <Card key={request.id} className="p-4">
+                    {selectedDateEvents.map((event: CalendarEvent) => (
+                      <Card key={event.id} className="p-4 border-l-4" style={{
+                        borderLeftColor: event.type === 'request' ? '#3b82f6' : '#10b981'
+                      }}>
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex-1">
-                            <h4 className="font-semibold">{request.subject}</h4>
+                            <div className="flex items-center gap-2">
+                              <Badge className={event.type === 'request' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}>
+                                {event.type === 'request' ? 'Request' : 'Activity'}
+                              </Badge>
+                              <h4 className="font-semibold">{event.title}</h4>
+                            </div>
                             <p className="text-sm text-gray-600 mt-1">
-                              Equipment: {request.equipment.name} ({request.equipment.serialNumber})
+                              Equipment: {event.equipment}
                             </p>
+                            {event.technician && (
+                              <p className="text-sm text-gray-600">
+                                Technician: {event.technician}
+                              </p>
+                            )}
+                            {event.workCenter && (
+                              <p className="text-sm text-gray-600">
+                                Work Center: {event.workCenter}
+                              </p>
+                            )}
                           </div>
-                          <Badge
-                            variant={
-                              request.status === 'REPAIRED'
-                                ? 'default'
-                                : request.status === 'SCRAP'
-                                ? 'destructive'
-                                : 'secondary'
-                            }
-                          >
-                            {request.status
+                          <Badge className={getStatusColor(event.status, event.type)}>
+                            {event.status
                               .toLowerCase()
                               .split('_')
                               .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
                               .join(' ')}
                           </Badge>
                         </div>
-                        <Link href="/">
-                          <Button variant="outline" size="sm" className="mt-2">
-                            View Details
-                          </Button>
-                        </Link>
+                        {event.type === 'request' ? (
+                          <Link href="/">
+                            <Button variant="outline" size="sm" className="mt-2">
+                              View Details
+                            </Button>
+                          </Link>
+                        ) : (
+                          <Link href="/activities">
+                            <Button variant="outline" size="sm" className="mt-2">
+                              View Activity
+                            </Button>
+                          </Link>
+                        )}
                       </Card>
                     ))}
                   </div>
@@ -196,13 +298,18 @@ export default function CalendarPage() {
                   <div className="text-center py-12">
                     <p className="text-gray-500 mb-4">
                       {selectedDate
-                        ? 'No preventive maintenance scheduled for this date'
-                        : 'Select a date from the calendar'}
+                        ? 'No maintenance scheduled for this date'
+                        : 'Select a date from calendar'}
                     </p>
                     {selectedDate && (
-                      <Link href="/">
-                        <Button>Schedule New Preventive Maintenance</Button>
-                      </Link>
+                      <div className="flex gap-3 justify-center">
+                        <Link href="/">
+                          <Button>Create Request</Button>
+                        </Link>
+                        <Link href="/activities">
+                          <Button variant="outline">Log Activity</Button>
+                        </Link>
+                      </div>
                     )}
                   </div>
                 )}

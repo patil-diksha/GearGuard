@@ -22,7 +22,8 @@ export async function GET(request: NextRequest) {
           include: {
             assignedMaintenanceTeam: true
           }
-        }
+        },
+        workCenter: true
       },
       orderBy: { createdAt: 'desc' }
     })
@@ -44,47 +45,76 @@ export async function POST(request: Request) {
       subject, 
       description,
       type, 
-      equipmentId, 
+      equipmentId,
+      workCenterId,
       scheduledDate,
       assignedTechnician,
       duration,
-      status 
+      status,
+      urgency,
+      category,
+      usedPart,
+      activationTicket 
     } = body
 
-    // Validate required fields
-    if (!subject || !equipmentId || !type) {
+    // Validate required fields - either equipmentId OR workCenterId must be provided
+    if (!subject || !type) {
       return NextResponse.json(
-        { error: 'Subject, equipment, and type are required' },
+        { error: 'Subject and type are required' },
         { status: 400 }
       )
     }
 
-    // Auto-fill logic: Get equipment and its assigned team
-    const equipment = await prisma.equipment.findUnique({
-      where: { id: equipmentId },
-      include: { assignedMaintenanceTeam: true }
-    })
-
-    if (!equipment) {
+    if (!equipmentId && !workCenterId) {
       return NextResponse.json(
-        { error: 'Equipment not found' },
-        { status: 404 }
+        { error: 'Either equipment or work center must be specified' },
+        { status: 400 }
       )
     }
 
-    // Create maintenance request with auto-filled team
+    let equipment = null
+    let autoFilledTeamId = null
+
+    // Auto-fill logic: Get equipment and its assigned team if equipmentId is provided
+    if (equipmentId) {
+      equipment = await prisma.equipment.findUnique({
+        where: { id: equipmentId },
+        include: { assignedMaintenanceTeam: true }
+      })
+
+      if (!equipment) {
+        return NextResponse.json(
+          { error: 'Equipment not found' },
+          { status: 404 }
+        )
+      }
+
+      autoFilledTeamId = equipment.assignedMaintenanceTeamId
+    }
+
+    // Create maintenance request
     const data: any = {
       subject,
       description,
       type: type.toUpperCase() as 'CORRECTIVE' | 'PREVENTIVE',
-      equipmentId,
-      autoFilledTeamId: equipment.assignedMaintenanceTeamId,
       status: status?.toUpperCase() || 'NEW'
+    }
+
+    if (equipmentId) {
+      data.equipmentId = equipmentId
+      data.autoFilledTeamId = autoFilledTeamId
+    }
+
+    if (workCenterId) {
+      data.workCenterId = workCenterId
     }
 
     if (assignedTechnician) data.assignedTechnician = assignedTechnician
     if (scheduledDate) data.scheduledDate = new Date(scheduledDate)
     if (duration) data.duration = parseFloat(duration)
+    if (urgency) data.urgency = urgency.toUpperCase()
+    if (usedPart) data.usedPart = usedPart
+    if (activationTicket) data.activationTicket = activationTicket
 
     const maintenanceRequest = await prisma.maintenanceRequest.create({
       data,
@@ -93,17 +123,18 @@ export async function POST(request: Request) {
           include: {
             assignedMaintenanceTeam: true
           }
-        }
+        },
+        workCenter: true
       }
     })
 
     // Log activity for request creation
-    if (equipment.assignedMaintenanceTeamId) {
+    if (autoFilledTeamId) {
       await prisma.teamActivity.create({
         data: {
           requestId: maintenanceRequest.id,
-          teamId: equipment.assignedMaintenanceTeamId,
-          action: `Request created for ${equipment.name}`
+          teamId: autoFilledTeamId,
+          action: `Request created for ${equipment?.name || 'Work Center'}`
         }
       })
     }

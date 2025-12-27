@@ -1,55 +1,61 @@
 'use client'
 
-import React, { createContext, useContext, useState } from 'react'
+import React, { createContext, useContext, useState, useEffect } from 'react'
 
 export type UserRole = 'admin' | 'manager' | 'technician' | 'user'
 
 interface User {
   id: string
+  email: string
   name: string
-  role: UserRole
+  role?: UserRole
   avatar?: string
 }
 
 interface AuthContextType {
   user: User | null
-  loginAs: (role: UserRole, name: string) => void
+  login: (user: User) => void
   logout: () => void
-  availableUsers: User[]
+  isLoading: boolean
 }
-
-const AVAILABLE_USERS: User[] = [
-  { id: '1', name: 'Admin User', role: 'admin', avatar: 'AU' },
-  { id: '2', name: 'Manager John', role: 'manager', avatar: 'MJ' },
-  { id: '3', name: 'Tech Sarah', role: 'technician', avatar: 'TS' },
-  { id: '4', name: 'Regular User', role: 'user', avatar: 'RU' },
-]
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(AVAILABLE_USERS[2]) // Default to technician
+  const [user, setUser] = useState<User | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
-  const loginAs = (role: UserRole, name: string) => {
-    const selectedUser = AVAILABLE_USERS.find(
-      (u) => u.role === role && u.name === name
-    )
-    if (selectedUser) {
-      setUser(selectedUser)
+  useEffect(() => {
+    // Check for stored user on mount
+    const storedUser = localStorage.getItem('user')
+    if (storedUser) {
+      try {
+        setUser(JSON.parse(storedUser))
+      } catch (error) {
+        console.error('Error parsing stored user:', error)
+        localStorage.removeItem('user')
+      }
     }
+    setIsLoading(false)
+  }, [])
+
+  const login = (userData: User) => {
+    setUser(userData)
+    localStorage.setItem('user', JSON.stringify(userData))
   }
 
   const logout = () => {
     setUser(null)
+    localStorage.removeItem('user')
   }
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        loginAs,
+        login,
         logout,
-        availableUsers: AVAILABLE_USERS,
+        isLoading,
       }}
     >
       {children}

@@ -12,6 +12,18 @@ const adapter = new PrismaPg(pool)
 const prisma = new PrismaClient({ adapter })
 
 async function main() {
+  // Clean up existing data in reverse order of dependencies
+  await prisma.activity.deleteMany()
+  await prisma.workOrder.deleteMany()
+  await prisma.part.deleteMany()
+  await prisma.workCenter.deleteMany()
+  await prisma.teamActivity.deleteMany()
+  await prisma.maintenanceRequest.deleteMany()
+  await prisma.equipment.deleteMany()
+  await prisma.maintenanceTeam.deleteMany()
+
+  console.log('Existing data cleared successfully!')
+
   // Create Maintenance Teams
   const mechanicsTeam = await prisma.maintenanceTeam.create({
     data: {
@@ -244,11 +256,398 @@ async function main() {
     }
   })
 
+  // Create Work Centers
+  const workCenter1 = await prisma.workCenter.create({
+    data: {
+      name: 'Production Line A',
+      location: 'Building D - Floor 1',
+      department: 'Manufacturing'
+    }
+  })
+
+  const workCenter2 = await prisma.workCenter.create({
+    data: {
+      name: 'IT Server Room',
+      location: 'Building A - Floor 3',
+      department: 'IT'
+    }
+  })
+
+  const workCenter3 = await prisma.workCenter.create({
+    data: {
+      name: 'Facilities Workshop',
+      location: 'Building B - Ground Floor',
+      department: 'Facilities'
+    }
+  })
+
+  // Create Parts
+  const part1 = await prisma.part.create({
+    data: {
+      name: 'HVAC Compressor',
+      modelNo: 'HC-5000',
+      serialNo: 'PART-2024-001',
+      location: 'Facilities Workshop - Shelf A3',
+      workCenterId: workCenter3.id,
+      cost: 1250.00,
+      quantity: 2,
+      minQuantity: 1,
+      description: 'High-efficiency compressor for HVAC units'
+    }
+  })
+
+  const part2 = await prisma.part.create({
+    data: {
+      name: 'Cooling Fan 120mm',
+      modelNo: 'CF-120-PRO',
+      serialNo: 'PART-2024-002',
+      location: 'IT Server Room - Cabinet B2',
+      workCenterId: workCenter2.id,
+      cost: 45.50,
+      quantity: 15,
+      minQuantity: 5,
+      description: 'High-performance cooling fan for server racks'
+    }
+  })
+
+  const part3 = await prisma.part.create({
+    data: {
+      name: 'Motor Bearing Set',
+      modelNo: 'MB-SET-3000',
+      serialNo: 'PART-2024-003',
+      location: 'Facilities Workshop - Shelf B1',
+      workCenterId: workCenter3.id,
+      cost: 85.00,
+      quantity: 8,
+      minQuantity: 3,
+      description: 'Complete bearing set for industrial motors'
+    }
+  })
+
+  const part4 = await prisma.part.create({
+    data: {
+      name: 'Conveyor Belt Drive Motor',
+      modelNo: 'CDM-500',
+      serialNo: 'PART-2024-004',
+      location: 'Production Line A - Storage',
+      workCenterId: workCenter1.id,
+      cost: 890.00,
+      quantity: 1,
+      minQuantity: 1,
+      description: 'Drive motor for conveyor belt systems'
+    }
+  })
+
+  const part5 = await prisma.part.create({
+    data: {
+      name: 'Air Filter 20x25x1',
+      modelNo: 'AF-2025-01',
+      serialNo: 'PART-2024-005',
+      location: 'Facilities Workshop - Shelf A5',
+      workCenterId: workCenter3.id,
+      cost: 12.50,
+      quantity: 25,
+      minQuantity: 10,
+      description: 'Standard HVAC air filter'
+    }
+  })
+
+  const part6 = await prisma.part.create({
+    data: {
+      name: 'Electrical Breaker 50A',
+      modelNo: 'EB-50A-S',
+      serialNo: 'PART-2024-006',
+      location: 'Facilities Workshop - Shelf C1',
+      workCenterId: workCenter3.id,
+      cost: 35.00,
+      quantity: 6,
+      minQuantity: 2,
+      description: '50A circuit breaker for electrical panels'
+    }
+  })
+
+  const part7 = await prisma.part.create({
+    data: {
+      name: 'Thermal Paste 5g',
+      modelNo: 'TP-5G-PRE',
+      serialNo: 'PART-2024-007',
+      location: 'IT Server Room - Cabinet A1',
+      workCenterId: workCenter2.id,
+      cost: 8.99,
+      quantity: 20,
+      minQuantity: 8,
+      description: 'High-performance thermal paste for CPUs'
+    }
+  })
+
+  const part8 = await prisma.part.create({
+    data: {
+      name: 'Control Panel Switch',
+      modelNo: 'CPS-3POS',
+      serialNo: 'PART-2024-008',
+      location: 'Facilities Workshop - Shelf B4',
+      workCenterId: workCenter3.id,
+      cost: 28.00,
+      quantity: 12,
+      minQuantity: 4,
+      description: '3-position toggle switch for control panels'
+    }
+  })
+
+  // Create Work Orders
+  const workOrder1 = await prisma.workOrder.create({
+    data: {
+      requestId: request2.id,
+      workCenterId: workCenter3.id,
+      technicianId: 'Mike Johnson',
+      status: 'IN_PROGRESS',
+      priority: 'HIGH',
+      estimatedHours: 2.5,
+      actualHours: 1.5,
+      notes: 'Generator bearing inspection in progress'
+    }
+  })
+
+  const workOrder2 = await prisma.workOrder.create({
+    data: {
+      requestId: request3.id,
+      workCenterId: workCenter2.id,
+      technicianId: 'Alex Anderson',
+      status: 'COMPLETED',
+      priority: 'URGENT',
+      estimatedHours: 3.0,
+      actualHours: 2.75,
+      notes: 'Server rack cooling system repair completed'
+    }
+  })
+
+  const workOrder3 = await prisma.workOrder.create({
+    data: {
+      requestId: request4.id,
+      workCenterId: workCenter1.id,
+      technicianId: 'Sarah Wilson',
+      status: 'PENDING',
+      priority: 'URGENT',
+      estimatedHours: 4.0,
+      notes: 'Conveyor belt motor replacement - awaiting parts'
+    }
+  })
+
+  const workOrder4 = await prisma.workOrder.create({
+    data: {
+      requestId: request1.id,
+      workCenterId: workCenter3.id,
+      technicianId: 'John Smith',
+      status: 'PENDING',
+      priority: 'MEDIUM',
+      estimatedHours: 2.0,
+      notes: 'Scheduled HVAC unit inspection'
+    }
+  })
+
+  const workOrder5 = await prisma.workOrder.create({
+    data: {
+      requestId: request5.id,
+      workCenterId: workCenter3.id,
+      technicianId: 'John Smith',
+      status: 'PENDING',
+      priority: 'LOW',
+      estimatedHours: 1.5,
+      notes: 'Quarterly HVAC maintenance - preventive'
+    }
+  })
+
+  // Create Activity Logs
+  const activity1 = await prisma.activity.create({
+    data: {
+      requestId: request2.id,
+      workOrderId: workOrder1.id,
+      name: 'Generator Bearing Inspection',
+      description: 'Initial inspection of generator main rotor bearings. Grinding noise confirmed.',
+      workCenterId: workCenter3.id,
+      technician: 'Mike Johnson',
+      startDate: new Date(today.getTime() - 2 * 60 * 60 * 1000), // 2 hours ago
+      endDate: new Date(today.getTime() - 1 * 60 * 60 * 1000), // 1 hour ago
+      status: 'COMPLETED',
+      partsUsed: [],
+      cost: 0,
+      oeeAchieved: 95.5
+    }
+  })
+
+  const activity2 = await prisma.activity.create({
+    data: {
+      requestId: request2.id,
+      workOrderId: workOrder1.id,
+      name: 'Bearing Lubrication',
+      description: 'Applied high-temperature grease to generator bearings. Noise reduced significantly.',
+      workCenterId: workCenter3.id,
+      technician: 'Mike Johnson',
+      startDate: new Date(today.getTime() - 1 * 60 * 60 * 1000), // 1 hour ago
+      status: 'IN_PROGRESS',
+      partsUsed: [],
+      cost: 15.00,
+      oeeAchieved: null
+    }
+  })
+
+  const activity3 = await prisma.activity.create({
+    data: {
+      requestId: request3.id,
+      workOrderId: workOrder2.id,
+      name: 'Server Rack Cooling Fan Replacement',
+      description: 'Replaced failed cooling fan in server rack. Temperature now stable.',
+      workCenterId: workCenter2.id,
+      technician: 'Alex Anderson',
+      startDate: new Date(today.getTime() - 24 * 60 * 60 * 1000), // 24 hours ago
+      endDate: new Date(today.getTime() - 22 * 60 * 60 * 1000), // 22 hours ago
+      status: 'COMPLETED',
+      partsUsed: [part2.serialNo],
+      cost: 45.50,
+      oeeAchieved: 99.2
+    }
+  })
+
+  const activity4 = await prisma.activity.create({
+    data: {
+      requestId: request3.id,
+      workOrderId: workOrder2.id,
+      name: 'Thermal Paste Replacement',
+      description: 'Cleaned and reapplied thermal paste to all server CPUs.',
+      workCenterId: workCenter2.id,
+      technician: 'Alex Anderson',
+      startDate: new Date(today.getTime() - 22 * 60 * 60 * 1000), // 22 hours ago
+      endDate: new Date(today.getTime() - 21 * 60 * 60 * 1000), // 21 hours ago
+      status: 'COMPLETED',
+      partsUsed: [part7.serialNo],
+      cost: 8.99,
+      oeeAchieved: 98.8
+    }
+  })
+
+  const activity5 = await prisma.activity.create({
+    data: {
+      requestId: request4.id,
+      workOrderId: workOrder3.id,
+      name: 'Conveyor Belt Motor Diagnosis',
+      description: 'Diagnosed conveyor belt motor failure. Confirmed stator winding damage. Requires replacement.',
+      workCenterId: workCenter1.id,
+      technician: 'Sarah Wilson',
+      startDate: new Date(today.getTime() - 3 * 60 * 60 * 1000), // 3 hours ago
+      endDate: new Date(today.getTime() - 2.5 * 60 * 60 * 1000), // 2.5 hours ago
+      status: 'COMPLETED',
+      partsUsed: [],
+      cost: 0,
+      oeeAchieved: 0
+    }
+  })
+
+  const activity6 = await prisma.activity.create({
+    data: {
+      requestId: request4.id,
+      workOrderId: workOrder3.id,
+      name: 'Motor Replacement',
+      description: 'Replace failed conveyor belt drive motor with new unit. Test and verify operation.',
+      workCenterId: workCenter1.id,
+      technician: 'Sarah Wilson',
+      status: 'PENDING',
+      partsUsed: [part4.serialNo],
+      cost: 890.00,
+      oeeAchieved: null
+    }
+  })
+
+  const activity7 = await prisma.activity.create({
+    data: {
+      requestId: request1.id,
+      workOrderId: workOrder4.id,
+      name: 'HVAC Compressor Check',
+      description: 'Inspect HVAC compressor operation and refrigerant levels.',
+      workCenterId: workCenter3.id,
+      technician: 'John Smith',
+      status: 'PENDING',
+      partsUsed: [],
+      cost: 0,
+      oeeAchieved: null
+    }
+  })
+
+  const activity8 = await prisma.activity.create({
+    data: {
+      requestId: request5.id,
+      workOrderId: workOrder5.id,
+      name: 'HVAC Filter Replacement',
+      description: 'Replace HVAC air filters and check airflow.',
+      workCenterId: workCenter3.id,
+      technician: 'John Smith',
+      status: 'PENDING',
+      partsUsed: [part5.serialNo],
+      cost: 12.50,
+      oeeAchieved: null
+    }
+  })
+
+  const activity9 = await prisma.activity.create({
+    data: {
+      requestId: request5.id,
+      workOrderId: workOrder5.id,
+      name: 'HVAC Electrical Inspection',
+      description: 'Inspect all electrical connections and control systems for HVAC unit.',
+      workCenterId: workCenter3.id,
+      technician: 'John Smith',
+      status: 'PENDING',
+      partsUsed: [],
+      cost: 0,
+      oeeAchieved: null
+    }
+  })
+
+  // Link parts to activities
+  await prisma.activity.update({
+    where: { id: activity3.id },
+    data: {
+      parts: {
+        connect: { id: part2.id }
+      }
+    }
+  })
+
+  await prisma.activity.update({
+    where: { id: activity4.id },
+    data: {
+      parts: {
+        connect: { id: part7.id }
+      }
+    }
+  })
+
+  await prisma.activity.update({
+    where: { id: activity6.id },
+    data: {
+      parts: {
+        connect: { id: part4.id }
+      }
+    }
+  })
+
+  await prisma.activity.update({
+    where: { id: activity8.id },
+    data: {
+      parts: {
+        connect: { id: part5.id }
+      }
+    }
+  })
+
   console.log('Seed data created successfully!')
   console.log(`Created 5 equipment items`)
   console.log(`Created 3 maintenance teams`)
   console.log(`Created 8 maintenance requests`)
   console.log(`Created 5 team activity logs`)
+  console.log(`Created 3 work centers`)
+  console.log(`Created 8 parts`)
+  console.log(`Created 5 work orders`)
+  console.log(`Created 9 activity logs`)
 }
 
 main()
